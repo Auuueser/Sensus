@@ -150,7 +150,7 @@ internal enum Cue
     DetailStingrayAIWhining
     // END GENERATED CREATURE CUES
     , SpringRetract, NutcrackerKick, NutcrackerFall, SlimeHit, PoolFloaty, VehicleRattle,
-    CounterBell, CounterShutter, CounterGrab, CounterAttack, CounterWarning, CounterAmbience, CounterSnore, AccessHatch, WarehouseDoor
+    CounterBell, CounterShutter, CounterGrab, CounterAttack, CounterWarning, CounterAmbience, CounterSnore, AccessHatch, WarehouseDoor, ItemStow, ToolWindup, LockMount, ItemHandling, MusicStop, ItemEquip, OtherItemPickup, OtherItemStow, OtherItemEquip, GunSafetyOn, GunSafetyOff, GunSafetyBlocked
 }
 
 internal static class CueText
@@ -172,7 +172,7 @@ internal static class CueText
     internal static int Priority(Cue cue) => cue==Cue.CounterAttack ? 3 : cue==Cue.CounterWarning ? 2 : BasePriority(CreatureSoundCatalog.Basis(cue));
     private static int BasePriority(Cue cue) => cue is Cue.NutcrackerKick or Cue.BloomChestOpen or Cue.MeteorImpact or Cue.WolfTongue or Cue.WolfPull or Cue.WolfAttack or Cue.BloomBurst or Cue.BloomChomp or Cue.ChairShock or Cue.Drowning or Cue.EggScream or Cue.MinePress or Cue.BodyCrush or Cue.DeathSound or Cue.Injury or Cue.UiWarning or Cue.PoisonFeedback or Cue.SpikeSlam or Cue.StaticWarning or Cue.BridgeCollapse or Cue.EquipmentWarning or Cue.VehicleFire or Cue.BuzzAttack or Cue.GroundRumble or Cue.BoxOpen or Cue.Aim or Cue.Gunshot or Cue.Roar or
         Cue.Transformation or Cue.Explosion or Cue.Launch or Cue.Alarm or Cue.Cling or Cue.VisorHit or Cue.DoorImpact or Cue.NeckSnap or Cue.PipeBurst or Cue.OtherCling or Cue.OtherNeckSnap or Cue.MaskInfection or Cue.LocalMaskInfection ? 3 :
-        cue is Cue.SlimeHit or Cue.PlantGrowth or Cue.MeteorApproach or Cue.WolfGrowl or Cue.WolfSnarl or Cue.WolfHit or Cue.BloomRoar or Cue.SporeCloud or Cue.MineBeep or Cue.DragFootsteps or Cue.MudSink or Cue.CreatureAttack or Cue.EggCry or Cue.VehicleJump or Cue.VehicleBoost or Cue.KnifeAttack or Cue.SeatEject or Cue.BootFootsteps or Cue.CreatureHit or Cue.Voice or Cue.SpikeCreak or Cue.Running or Cue.Zap or Cue.RadioRelay or Cue.BridgeCreak or Cue.BatteryWarning or Cue.PinPull or Cue.VehicleImpact or Cue.BuzzAlert or Cue.MaskSound or Cue.Music or Cue.Underground or Cue.Reload or Cue.Screaming or Cue.Crying or Cue.Drum or Cue.Snip or
+        cue is Cue.GunSafetyOff or Cue.SlimeHit or Cue.PlantGrowth or Cue.MeteorApproach or Cue.WolfGrowl or Cue.WolfSnarl or Cue.WolfHit or Cue.BloomRoar or Cue.SporeCloud or Cue.MineBeep or Cue.DragFootsteps or Cue.MudSink or Cue.CreatureAttack or Cue.EggCry or Cue.VehicleJump or Cue.VehicleBoost or Cue.KnifeAttack or Cue.SeatEject or Cue.BootFootsteps or Cue.CreatureHit or Cue.Voice or Cue.SpikeCreak or Cue.Running or Cue.Zap or Cue.RadioRelay or Cue.BridgeCreak or Cue.BatteryWarning or Cue.PinPull or Cue.VehicleImpact or Cue.BuzzAlert or Cue.MaskSound or Cue.Music or Cue.Underground or Cue.Reload or Cue.Screaming or Cue.Crying or Cue.Drum or Cue.Snip or
         Cue.Fire or Cue.Electric or Cue.Spit or Cue.Heartbeat or Cue.HeadRustling or Cue.Growl or Cue.HeavyFootsteps or Cue.TensionMusic or Cue.Steam or Cue.Bite or Cue.RadioVoice or Cue.GroundRadioVoice or Cue.SupplyLanding or Cue.VehicleDelivery ? 2 : 1;
 }
 
@@ -196,6 +196,13 @@ internal sealed class CaptionBuffer
     private readonly List<Entry> entries = new();
     private readonly List<Entry> visible = new();
     private readonly StringBuilder text = new();
+    private readonly Stack<Entry> pool = new(64);
+    private string composed="";
+    private void Retire(int index)
+    {
+        var entry=entries[index]; entries.RemoveAt(index); entry.Speaker="";
+        if(pool.Count<64) pool.Push(entry);
+    }
     internal int Count => entries.Count;
     internal void BeginFrame() { foreach (var e in entries) e.Live = false; }
     internal void Observe(int source, Cue cue, float now, int direction, bool spatial, bool continuous, bool localMovement = false, string speaker = "", bool captionFallback = false)
@@ -203,9 +210,9 @@ internal sealed class CaptionBuffer
         if(CreatureSoundCatalog.Basis(cue) is Cue.Footsteps or Cue.Running)
             foreach(var prior in entries) if(prior.Source==source && prior.Cue==Cue.DragFootsteps && now-prior.LastHeard<0.85f) return;
         if(CreatureSoundCatalog.Basis(cue) is Cue.Footsteps or Cue.Running)
-            for(int i=entries.Count-1;i>=0;i--) if(entries[i].Source==source && CreatureSoundCatalog.Basis(entries[i].Cue)!=CreatureSoundCatalog.Basis(cue) && CreatureSoundCatalog.Basis(entries[i].Cue) is Cue.Footsteps or Cue.Running) entries.RemoveAt(i);
+            for(int i=entries.Count-1;i>=0;i--) if(entries[i].Source==source && CreatureSoundCatalog.Basis(entries[i].Cue)!=CreatureSoundCatalog.Basis(cue) && CreatureSoundCatalog.Basis(entries[i].Cue) is Cue.Footsteps or Cue.Running) Retire(i);
         if(cue==Cue.DragFootsteps)
-            for(int i=entries.Count-1;i>=0;i--) if(entries[i].Source==source && CreatureSoundCatalog.Basis(entries[i].Cue) is Cue.Footsteps or Cue.Running) entries.RemoveAt(i);
+            for(int i=entries.Count-1;i>=0;i--) if(entries[i].Source==source && CreatureSoundCatalog.Basis(entries[i].Cue) is Cue.Footsteps or Cue.Running) Retire(i);
         Entry? found = null;
         foreach (var entry in entries) if (entry.Source == source && CreatureSoundCatalog.Basis(entry.Cue) == CreatureSoundCatalog.Basis(cue)) { found = entry; break; }
         if (found == null)
@@ -217,9 +224,10 @@ internal sealed class CaptionBuffer
                     if (CueText.Priority(entries[i].Cue) < CueText.Priority(entries[victim].Cue) ||
                         (CueText.Priority(entries[i].Cue) == CueText.Priority(entries[victim].Cue) && entries[i].LastHeard < entries[victim].LastHeard)) victim = i;
                 if (CueText.Priority(entries[victim].Cue) > CueText.Priority(cue)) return;
-                entries.RemoveAt(victim);
+                Retire(victim);
             }
-            found = new Entry { Source = source, Cue = cue, FirstHeard = now };
+            found = pool.Count>0 ? pool.Pop() : new Entry();
+            found.Source=source; found.Cue=cue; found.FirstHeard=now;
             entries.Add(found);
         }
         found.Cue=EventIdentity.Display(found.Cue,cue,now-found.LastHeard);
@@ -234,7 +242,7 @@ internal sealed class CaptionBuffer
     }
     internal string Compose(float now, float holdSeconds, int maxRows, bool chinese, bool directions, bool compact = false)
     {
-        entries.RemoveAll(e => now - e.LastHeard > holdSeconds);
+        for(int i=entries.Count-1;i>=0;i--) if(now-entries[i].LastHeard>holdSeconds) Retire(i);
         visible.Clear();
         foreach(var e in entries)
         {
@@ -270,8 +278,9 @@ internal sealed class CaptionBuffer
             if(e.Speaker.Length>0) text.Append(e.Speaker).Append(chinese ? "：" : ": ");
             text.Append(CueText.Name(e.Cue, chinese));
         }
-        return text.ToString();
+        composed=StableText.Reuse(text,composed);
+        return composed;
     }
     internal int Omitted { get; private set; }
-    internal void Clear() { entries.Clear(); visible.Clear(); Omitted=0; }
+    internal void Clear() { for(int i=entries.Count-1;i>=0;i--) Retire(i); visible.Clear(); Omitted=0; composed=""; }
 }

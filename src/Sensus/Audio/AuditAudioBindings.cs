@@ -54,8 +54,8 @@ internal static class AuditAudioBindings
 
     internal static bool NativeClip(AudioClip clip,out Cue cue)
     {
-        if(CreatureSoundCatalog.TryBase(clip.name,out cue)) return true;
-        cue=clip.name switch
+        if(CreatureSoundCatalog.TryBase(ClipNames.Get(clip),out cue)) return true;
+        cue=ClipNames.Get(clip) switch
         {
             "LightOn" or "LightOff" or "LightFlicker" or "NeonLightOn" or "NeonLightOff" or "NeonLightFlicker" => Cue.LightSwitch,
             "MaskLaugh1" or "MaskLaugh2" or "MaskLaugh3" or "Laugh1" => Cue.MaskLaugh,

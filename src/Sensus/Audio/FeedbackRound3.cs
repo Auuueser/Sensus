@@ -10,7 +10,7 @@ internal static class FeedbackRound3
     internal static bool Resolve(AudioSource source,AudioClip clip,out Cue cue)
     {
         cue=Cue.Creature;
-        var detail=AcousticDetails.Resolve(clip.name);
+        var detail=AcousticDetails.Resolve(ClipNames.Get(clip));
         if(detail is Cue.ZedDog or Cue.EggCry or Cue.EggScream or Cue.EggBreak)
         { cue=detail; return true; }
         if(AudioRegistry.Owner(source) is MicrowaveItem microwave && (clip==microwave.microwaveOpen || clip==microwave.microwaveClose))

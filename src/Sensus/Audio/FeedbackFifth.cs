@@ -14,6 +14,9 @@ internal static class FeedbackFifth
     internal static bool RequiresExplicitPlay(AudioSource source)
     {
         var owner=AudioRegistry.Owner(source);
+        // Stop leaves music assigned; a later one-shot must not revive it.
+        var boombox=owner as BoomboxItem ?? source.GetComponentInParent<BoomboxItem>();
+        if(boombox!=null && source==boombox.boomboxAudio) return true;
         var vehicle=owner as VehicleController ?? source.GetComponentInParent<VehicleController>();
         if(vehicle!=null && (source==vehicle.miscAudio || source==vehicle.turbulenceAudio)) return true;
         return owner is CadaverBloomAI bloom && source==bloom.burstSource ||
@@ -23,8 +26,8 @@ internal static class FeedbackFifth
     {
         var owner=AudioRegistry.Owner(source);
         cue=Cue.Creature;
-        if(clip.name is "PoolFloatyHit1" or "PoolFloatyHit2") { cue=Cue.PoolFloaty; return true; }
-        if(clip.name=="Cruiser_Turbulence" && owner is VehicleController) { cue=Cue.VehicleRattle; return true; }
+        if(ClipNames.Get(clip) is "PoolFloatyHit1" or "PoolFloatyHit2") { cue=Cue.PoolFloaty; return true; }
+        if(ClipNames.Get(clip)=="Cruiser_Turbulence" && owner is VehicleController) { cue=Cue.VehicleRattle; return true; }
         if(owner is BlobAI blob && clip==blob.hitSlimeSFX) { cue=Cue.SlimeHit; return true; }
         if(owner is SpringManAI spring && clip==spring.enterCooldownSFX) { cue=Cue.SpringRetract; return true; }
         if(owner is NutcrackerEnemyAI nut)
@@ -32,7 +35,7 @@ internal static class FeedbackFifth
             if(clip==nut.kickSFX) { cue=Cue.NutcrackerKick; return true; }
             if(clip==nut.dieSFX) { cue=Cue.NutcrackerFall; return true; }
         }
-        if(owner is VehicleController && clip.name=="Collision_Minimal") { cue=Cue.VehicleImpact; return true; }
+        if(owner is VehicleController && ClipNames.Get(clip)=="Collision_Minimal") { cue=Cue.VehicleImpact; return true; }
         if(owner is CadaverGrowthAI growth && source==growth.destroyAudio)
         { cue=Cue.PlantClear; return true; }
         if(owner is MoldSpreadManager mold && source==mold.destroyAudio)
@@ -50,11 +53,11 @@ internal static class FeedbackFifth
             else if(source==wolf.growlAudio) cue=Cue.WolfGrowl;
             if(cue!=Cue.Creature) return true;
         }
-        var detail=AcousticDetails.Resolve(clip.name);
+        var detail=AcousticDetails.Resolve(ClipNames.Get(clip));
         // Native death/hit routing otherwise overrides these verified distinct recordings.
         if(detail is Cue.WolfCall or Cue.WolfGrowl or Cue.WolfSnarl or Cue.WolfTongue or Cue.WolfPull or Cue.WolfAttack or Cue.WolfHit or Cue.WolfDeath)
         { cue=detail; return true; }
-        bool hatch=clip.name is "MetalHatchOpen" or "MetalHatchClose";
+        bool hatch=ClipNames.Get(clip) is "MetalHatchOpen" or "MetalHatchClose";
         if(hatch || detail is Cue.CabinetDoor or Cue.Cabinet)
             for(var t=source.transform;t!=null;t=t.parent)
             {

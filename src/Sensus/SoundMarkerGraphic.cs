@@ -431,6 +431,33 @@ internal sealed class SoundMarkerGraphic : MaskableGraphic
         else if(cue==Cue.Plushie)
         { Oval(-7,14,3,3); Oval(7,14,3,3); Oval(0,6,9,8); Oval(-3,8,1,1,40,true); Oval(3,8,1,1,40,true); Oval(0,3,2,1.5f,40,true); Oval(0,-8,6,7); Oval(-7,-14,3,2); Oval(7,-14,3,2);
           Line(P(-20,-2),P(-12,-2)); Line(P(-16,2),P(-12,-2)); Line(P(-12,-2),P(-16,-6)); Line(P(20,-2),P(12,-2)); Line(P(16,2),P(12,-2)); Line(P(12,-2),P(16,-6)); }
+        else if(cue==Cue.OtherItemPickup)
+        {
+            Box(-8,-4,16,16); Line(P(-16,-17),P(16,-17));
+        }
+        else if(cue==Cue.OtherItemStow)
+        {
+            Line(P(-7,-2),P(-7,7)); Line(P(-7,7),P(7,7)); Line(P(7,7),P(7,-2));
+            Line(P(-15,-2),P(15,-2)); Line(P(15,-2),P(12,-17));
+            Line(P(12,-17),P(-12,-17)); Line(P(-12,-17),P(-15,-2));
+        }
+        else if(cue==Cue.OtherItemEquip)
+        {
+            Box(-7,4,14,14);
+            Line(P(-15,-8),P(-12,-19)); Line(P(-12,-19),P(12,-19));
+            Line(P(12,-19),P(15,-8)); Line(P(-15,-8),P(15,-8));
+        }
+        else if(cue is Cue.GunSafetyOn or Cue.GunSafetyOff or Cue.GunSafetyBlocked)
+        {
+            Box(-12,-14,24,19);
+            if(cue==Cue.GunSafetyOff)
+            { Curve(P(-7,5),P(-10,20),P(3,17)); Line(P(3,17),P(7,13)); }
+            else { Curve(P(-7,5),P(-10,20),P(0,18)); Curve(P(0,18),P(10,20),P(7,5)); }
+            Oval(0,-2,2,2); Line(P(0,-4),P(0,-9));
+            if(cue==Cue.GunSafetyBlocked) { Line(P(-17,14),P(17,-18)); }
+        }
+        else if(cue==Cue.MusicStop)
+        { Box(-17,-12,34,24); Oval(-9,0,4,4); Oval(9,0,4,4); Box(-3,-3,6,6); Line(P(-8,16),P(8,16)); }
         else if(cue==Cue.RecordPlayer)
         { Box(-16,-14,32,28); Oval(-3,0,10,10); Oval(-3,0,2,2); Line(P(12,10),P(12,0)); Line(P(12,0),P(5,-6)); }
         else if(cue==Cue.Toilet)
@@ -575,7 +602,7 @@ internal sealed class SoundMarkerGraphic : MaskableGraphic
             Line(P(-9,-14),P(-9,15)); Line(P(9,-14),P(9,15));
             for(int i=-10;i<=12;i+=7) Line(P(-9,i),P(9,i));
         }
-        else if(cue is Cue.ToolSwing)
+        else if(cue is Cue.ToolSwing or Cue.ToolWindup)
         {
             Line(P(-11,-13),P(5,7),4); Line(P(1,7),P(7,14),5); Line(P(7,14),P(14,8),5);
             Curve(P(-12,13),P(-2,18),P(3,16),2);
@@ -675,7 +702,7 @@ internal sealed class SoundMarkerGraphic : MaskableGraphic
             Line(P(-4,12),P(8,12)); Line(P(8,12),P(13,3)); Line(P(13,3),P(17,1));
             Line(P(17,1),P(17,-7)); Line(P(-16,-7),P(17,-7)); Oval(-9,-9,3,3); Oval(10,-9,3,3);
         }
-        else if(cue is Cue.LockPicking or Cue.Unlock)
+        else if(cue is Cue.LockPicking or Cue.Unlock or Cue.LockMount)
         {
             Oval(-7,5,6,6); Line(P(-2,1),P(12,-12),4); Line(P(7,-7),P(11,-3)); Line(P(11,-11),P(15,-7));
         }

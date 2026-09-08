@@ -13,6 +13,7 @@ internal sealed class PeripheralPresenter
     {
         internal RectTransform Root = null!;
         internal SoundMarkerGraphic Graphic = null!;
+        internal SoundMarkerGraphic Arc = null!;
         internal TextMeshProUGUI Label = null!;
         internal Image Backing = null!;
         internal int Id;
@@ -24,10 +25,19 @@ internal sealed class PeripheralPresenter
         internal bool LabelChinese, LabelRear, LabelUnlocatedText;
         internal float LabelUnit;
         internal TMP_FontAsset? LabelFont;
-        internal string TrayText="";
-        internal float TrayWidth=-1, TrayUnit, NaturalWidth, TextHeight;
-        internal TMP_FontAsset? TrayFont;
+        internal int Omitted;
+
+
+
+        internal float PlacedUnit = -1;
     }
+    private float summaryMeasuredUnit=-1, summaryTextWidth;
+    private string summaryMeasuredText="";
+    private TMP_FontAsset? summaryMeasuredFont;
+    private int summaryCount=-1;
+    private bool summaryChinese;
+    private Image? summaryBacking;
+    private TextMeshProUGUI? traySummary;
     private RectTransform? root;
     private readonly List<Marker> markers = new();
     private readonly List<Marker> overflow = new();
@@ -42,7 +52,7 @@ internal sealed class PeripheralPresenter
     private bool firstRealMarker;
     private float trayWidth, trayRowHeight, trayGap, trayUnit;
     private int trayCount;
-    internal float UnlocatedHeight => trayCount==0 ? 0 : trayCount*trayRowHeight+(trayCount-1)*trayGap;
+    internal float UnlocatedHeight => trayCount==0 ? 0 : trayCount*trayRowHeight+(trayCount-1)*trayGap+(traySummary!=null && traySummary.gameObject.activeSelf ? trayUnit : 0);
     internal PeripheralPresenter(ManualLogSource log) => this.log = log;
 
     internal void Tick(Canvas canvas, TextMeshProUGUI template, SoundField field, SensusSettings settings, bool chinese, bool preview, Rect fullSafe)
@@ -58,6 +68,8 @@ internal sealed class PeripheralPresenter
             if (imageTemplate == null) { Clear(); return; }
 
             for (int i = 0; i < 8; i++) overflow.Add(Create(template, imageTemplate, "AdditionalSoundDirection", root));
+            summaryBacking=NativeUiTemplates.CloneImage(imageTemplate,root,"UnlocatedOverflowBacking");
+            traySummary=NativeUiTemplates.CloneText(template,root,"UnlocatedOverflowSummary");
             log.LogInfo("Sensus peripheral UGUI created: pooled sound symbols, native labels and critical overflow arcs.");
         }
         root.gameObject.SetActive(true);
@@ -91,7 +103,8 @@ internal sealed class PeripheralPresenter
             Mathf.Min(rect.center.y-layoutBounds.yMin,layoutBounds.yMax-rect.center.y)-unit*5.1f-margin));
         positionCount=DisplayCapacity.Rows(2*Mathf.PI*Mathf.Min(rx,ry),unit*8.6f);
         int desired=DisplayCapacity.Resolve(settings.MarkerCount.Value,positionCount);
-        int trayFit=DisplayCapacity.Rows(fullSafe.height*0.45f,unit*3.3f*0.85f);
+        float trayBase=Mathf.Max(14,template.fontSize)*settings.Scale.Value*0.85f;
+        int trayFit=DisplayCapacity.Rows(fullSafe.height*0.75f-trayBase,trayBase*2.95f);
         int desiredTray=settings.UnlocatedIndicators.Value ? DisplayCapacity.Resolve(settings.UnlocatedCount.Value,trayFit) : 0;
         field.Update(now,desired,yaw,desiredTray);
         var poolTemplate=template.GetComponentInParent<Image>();
@@ -100,12 +113,31 @@ internal sealed class PeripheralPresenter
         Grow(markers,field.Visible.Count,template,poolTemplate,"Sound");
         Grow(tray,field.Unlocated.Count,template,poolTemplate,"UnlocatedSound");
         // Rotate only through slots that are ready, rather than losing selected events.
-        field.Update(now,Mathf.Min(desired,markers.Count),yaw,Mathf.Min(desiredTray,tray.Count));
+        if(markers.Count<field.Visible.Count || tray.Count<field.Unlocated.Count)
+            field.Update(now,Mathf.Min(desired,markers.Count),yaw,Mathf.Min(desiredTray,tray.Count));
         Match(markers,field.Visible); Match(tray,field.Unlocated);
+        // Reorder only when selection changes; cycling every sibling each frame
+        // dirties the entire native Canvas even when the final order is unchanged.
+        for(int i=0;i<field.Visible.Count && i<markers.Count;i++)
+            if(markers[i].Root.GetSiblingIndex()!=root.childCount-field.Visible.Count+i) markers[i].Root.SetAsLastSibling();
+        if(traySummary!=null)
+        {
+            int extra=field.OmittedUnlocated;
+            traySummary.gameObject.SetActive(settings.UnlocatedIndicators.Value && field.Unlocated.Count>0 && extra>0);
+            if(extra>0 && (summaryCount!=extra || summaryChinese!=chinese)) { summaryCount=extra; summaryChinese=chinese; string summary=chinese ? "另有 "+extra+" 项" : "+ "+extra+" more"; if(traySummary.text!=summary) traySummary.text=summary; }
+            traySummary.color=new Color(0.96f,0.96f,0.92f,1);
+            if(summaryBacking!=null)
+            {
+                summaryBacking.gameObject.SetActive(traySummary.gameObject.activeSelf && settings.ShowBackground.Value && settings.BackgroundOpacity.Value>0);
+                summaryBacking.color=new Color(0.015f,0.02f,0.015f,1);
+                summaryBacking.canvasRenderer.SetAlpha(settings.BackgroundOpacity.Value);
+            }
+        }
         placedCount=0;
         for (int i = 0; i < markers.Count+tray.Count; i++)
         {
             bool unlocated = i>=markers.Count;
+            unit=Mathf.Max(14,template.fontSize)*(unlocated ? settings.Scale.Value : settings.MarkerScale.Value);
             int index=unlocated ? i-markers.Count : i;
             var marker = unlocated ? tray[index] : markers[index];
             var signals=unlocated ? field.Unlocated : field.Visible;
@@ -132,7 +164,8 @@ internal sealed class PeripheralPresenter
                 marker.Angle = IndicatorDetail.Follow(marker.Angle,relative,Time.unscaledDeltaTime,settings.LowMotion.Value);
             }
             bool compact = false;
-            Place(marker, rect, marker.Angle, 0, unit, settings.RingSize.Value);
+            marker.Root.gameObject.SetActive(true);
+            if(!unlocated) SizeMarker(marker,unit);
             if(!unlocated)
             {
                 float step=360f/Mathf.Max(1,positionCount);
@@ -145,7 +178,6 @@ internal sealed class PeripheralPresenter
                 marker.Position=Orbit(marker.OrbitAngle,rx,ry);
                 marker.Root.anchoredPosition=marker.Position;
                 placed[placedCount++]=signal.Bearing+marker.OrbitOffset;
-                marker.Root.SetAsLastSibling();
 
             }
 
@@ -156,25 +188,32 @@ internal sealed class PeripheralPresenter
                 tint=new Color(1,0.8f-0.55f*urgency,0.25f-0.03f*urgency,alpha);
             // Color animation uses the renderer multiplier, avoiding a mesh rebuild
             // for every frame of the winding gradient. Reset pooled non-music markers.
-            if(signal.Cue==Cue.Music)
-            { marker.Graphic.color=Color.white; marker.Graphic.canvasRenderer.SetColor(tint); }
-            else
-            { marker.Graphic.color=tint; marker.Graphic.canvasRenderer.SetColor(Color.white); }
-            marker.Graphic.Set(unlocated ? 0 : marker.Angle, signal.Cue, signal.Strength, compact, !unlocated);
+            marker.Graphic.color=Color.white; marker.Graphic.canvasRenderer.SetColor(tint);
+            marker.Arc.color=Color.white; marker.Arc.canvasRenderer.SetColor(tint);
+            // The expensive glyph is independent of bearing. Rotate a separate
+            // static arc with the transform, never regenerate the whole glyph.
+            marker.Graphic.Set(0, signal.Cue, signal.Strength, compact, false);
+            marker.Arc.gameObject.SetActive(!unlocated);
+            marker.Arc.Set(0,signal.Cue,1,true,true);
+            marker.Arc.rectTransform.localRotation=Quaternion.Euler(0,0,-marker.Angle);
             marker.Label.font = template.font; marker.Label.fontSharedMaterial = template.fontSharedMaterial;
-            marker.Label.color = new Color(0.96f,0.96f,0.92f,alpha);
+            marker.Label.color = new Color(0.96f,0.96f,0.92f,1);
+            marker.Label.canvasRenderer.SetAlpha(alpha);
             bool rear = !unlocated && CueText.DirectionIndex(marker.Angle)==4;
             bool showUnlocatedText=unlocated && settings.UnlocatedText.Value;
-            bool layoutChanged = marker.LabelCue != signal.Cue || marker.LabelChinese != chinese || marker.LabelRear != rear ||
+            int omitted=0;
+            bool layoutChanged = marker.Omitted!=omitted || marker.LabelCue != signal.Cue || marker.LabelChinese != chinese || marker.LabelRear != rear ||
                 marker.LabelUnit != unit || marker.LabelFont != template.font || marker.LabelUnlocatedText != showUnlocatedText;
             bool labels = settings.MarkerLabels.Value && !compact;
             marker.Label.gameObject.SetActive(labels);
             marker.Backing.gameObject.SetActive(labels && settings.ShowBackground.Value && settings.BackgroundOpacity.Value > 0);
-            marker.Backing.color = new Color(0.015f,0.02f,0.015f,settings.BackgroundOpacity.Value*alpha);
+            marker.Backing.color = new Color(0.015f,0.02f,0.015f,1);
+            marker.Backing.canvasRenderer.SetAlpha(settings.BackgroundOpacity.Value*alpha);
             if (layoutChanged)
             {
                 marker.Label.enableAutoSizing=false; marker.Label.fontSize=unit*0.8f;
-                marker.Label.text = IndicatorDetail.Label(signal.Cue,chinese,rear,showUnlocatedText);
+                marker.Label.text = IndicatorDetail.Label(signal.Cue,chinese,rear,showUnlocatedText) + (omitted>0 ? (chinese ? "\n另有 " : "\n+ ")+omitted+(chinese ? " 项" : " more") : "");
+                marker.Omitted=omitted;
                 marker.LabelCue=signal.Cue; marker.LabelChinese=chinese; marker.LabelRear=rear;
                 marker.LabelUnit=unit; marker.LabelFont=template.font; marker.LabelUnlocatedText=showUnlocatedText;
                 float labelWidth=unlocated ? Mathf.Min(unit*8,rect.width*0.27f) : unit*6.5f;
@@ -198,6 +237,7 @@ internal sealed class PeripheralPresenter
             marker.Graphic.rectTransform.localRotation=Quaternion.Euler(0,0,
                 signal.Cue==Cue.Music ? WindingEnvelope.Shake(signal.WindingSeconds,live,settings.LowMotion.Value) : 0);
         }
+        unit=Mathf.Max(14,template.fontSize)*settings.MarkerScale.Value;
         for (int i = 0; i < overflow.Count; i++)
         {
             var marker = overflow[i];
@@ -216,36 +256,37 @@ internal sealed class PeripheralPresenter
     internal void MeasureUnlocated(Rect safe, float unit)
     {
         trayCount=0; trayUnit=unit; trayGap=unit*0.35f;
-        if(root==null || !root.gameObject.activeSelf) return;
-        trayWidth=unit*2.8f;
-        for(int i=0;i<tray.Count;i++)
-        {
-            var m=tray[i]; if(!m.Root.gameObject.activeSelf) continue;
-            trayCount++;
-            m.Label.enableAutoSizing=false; m.Label.fontSize=unit*0.8f;
-            if(m.TrayText!=m.Label.text || m.TrayFont!=m.Label.font || m.TrayUnit!=unit)
-            {
-                m.TrayText=m.Label.text; m.TrayFont=m.Label.font; m.TrayUnit=unit; m.TrayWidth=-1;
-                m.NaturalWidth=m.Label.GetPreferredValues(m.Label.text,Mathf.Infinity,Mathf.Infinity).x;
-            }
-            if(m.Label.gameObject.activeSelf) trayWidth=Mathf.Max(trayWidth,m.NaturalWidth+unit*3.2f);
-        }
-        trayWidth=Mathf.Min(trayWidth,safe.width);
-        float textWidth=Mathf.Max(1,trayWidth-unit*3.2f);
+        trayWidth=Mathf.Min(unit*11,safe.width);
         trayRowHeight=unit*2.6f;
-        for(int i=0;i<tray.Count;i++)
-        {
-            var m=tray[i]; if(!m.Root.gameObject.activeSelf || !m.Label.gameObject.activeSelf) continue;
-            if(m.TrayWidth!=textWidth)
-            { m.TrayWidth=textWidth; m.TextHeight=m.Label.GetPreferredValues(m.Label.text,textWidth,Mathf.Infinity).y; }
-            trayRowHeight=Mathf.Max(trayRowHeight,Mathf.Min(m.TextHeight,unit*2.4f)+unit*0.8f);
-        }
-        // Keep room for subtitles even at large UI scales. Text can shrink within a card.
-        if(trayCount>0) trayRowHeight=Mathf.Min(trayRowHeight,Mathf.Max(1,(safe.height*0.45f-(trayCount-1)*trayGap)/trayCount));
+        if(root==null || !root.gameObject.activeSelf) return;
+        foreach(var marker in tray) if(marker.Root.gameObject.activeSelf) trayCount++;
     }
     internal void ArrangeUnlocated(Rect safe, float bottom, Vector2 canvasCenter)
     {
         float top=Mathf.Min(safe.yMax,Mathf.Max(safe.yMin,bottom)+UnlocatedHeight);
+        if(traySummary!=null && traySummary.gameObject.activeSelf)
+        {
+            var summary=traySummary.rectTransform;
+            summary.anchorMin=summary.anchorMax=new Vector2(0.5f,0.5f); summary.pivot=new Vector2(1,0.5f);
+            summary.anchoredPosition=new Vector2(safe.xMax,top-trayUnit*0.4f)-canvasCenter;
+            if(summaryMeasuredUnit!=trayUnit || summaryMeasuredText!=traySummary.text || summaryMeasuredFont!=traySummary.font)
+            {
+                traySummary.fontSize=trayUnit*0.55f; traySummary.enableAutoSizing=false;
+                summaryTextWidth=traySummary.GetPreferredValues(traySummary.text,Mathf.Infinity,Mathf.Infinity).x;
+                summaryMeasuredUnit=trayUnit; summaryMeasuredText=traySummary.text; summaryMeasuredFont=traySummary.font;
+            }
+            summary.sizeDelta=new Vector2(Mathf.Min(trayWidth,summaryTextWidth+trayUnit*0.8f),trayUnit*0.8f);
+            traySummary.fontSize=trayUnit*0.55f; traySummary.enableAutoSizing=false;
+            traySummary.alignment=TextAlignmentOptions.Right; traySummary.enableWordWrapping=false;
+            traySummary.margin=new Vector4(trayUnit*0.4f,0,trayUnit*0.4f,0);
+            if(summaryBacking!=null)
+            {
+                var backing=summaryBacking.rectTransform;
+                backing.anchorMin=summary.anchorMin; backing.anchorMax=summary.anchorMax; backing.pivot=summary.pivot;
+                backing.anchoredPosition=summary.anchoredPosition; backing.sizeDelta=summary.sizeDelta;
+            }
+            top-=trayUnit;
+        }
         int row=0;
         for(int i=0;i<tray.Count;i++)
         {
@@ -291,9 +332,14 @@ internal sealed class PeripheralPresenter
         var rect = go.GetComponent<RectTransform>(); rect.anchorMin=rect.anchorMax=new Vector2(0.5f,0.5f);
         var icon = new GameObject("DirectionAndSound",typeof(RectTransform)); icon.transform.SetParent(rect,false);
         var graphic = icon.AddComponent<SoundMarkerGraphic>(); graphic.raycastTarget=false; graphic.maskable=false;
+        var arcObject=new GameObject("DirectionArc",typeof(RectTransform)); arcObject.transform.SetParent(icon.transform,false);
+        var arc=arcObject.AddComponent<SoundMarkerGraphic>(); arc.raycastTarget=false; arc.maskable=false;
+        arc.gameObject.SetActive(false);
+        arc.rectTransform.anchorMin=Vector2.zero; arc.rectTransform.anchorMax=Vector2.one;
+        arc.rectTransform.offsetMin=arc.rectTransform.offsetMax=Vector2.zero;
         var backing = NativeUiTemplates.CloneImage(imageTemplate,rect,"LabelContrast");
         var label = NativeUiTemplates.CloneText(template,rect,"SoundLabel"); label.alignment=TextAlignmentOptions.Top;
-        return new Marker { Root=rect,Graphic=graphic,Label=label,Backing=backing };
+        return new Marker { Root=rect,Graphic=graphic,Arc=arc,Label=label,Backing=backing };
     }
     private static void Place(Marker marker, Rect rect, float angle, int lane, float unit, float radius)
     {
@@ -305,6 +351,12 @@ internal sealed class PeripheralPresenter
         float minY=-rect.height*0.5f+unit*4.2f+8;
         float maxY=Mathf.Max(minY,rect.height*0.5f-unit*1.5f-8);
         marker.Root.anchoredPosition=new Vector2(Mathf.Clamp(Mathf.Sin(a)*rx,-maxX,maxX),Mathf.Clamp(Mathf.Cos(a)*ry,minY,maxY));
+        SizeMarker(marker,unit);
+    }
+    private static void SizeMarker(Marker marker,float unit)
+    {
+        if(marker.PlacedUnit==unit) return;
+        marker.PlacedUnit=unit;
         marker.Root.sizeDelta=new Vector2(unit*9,unit*4);
         marker.Graphic.rectTransform.sizeDelta=new Vector2(unit*2.8f,unit*2.8f);
         marker.Graphic.rectTransform.anchorMin=marker.Graphic.rectTransform.anchorMax=new Vector2(0.5f,0.5f);
@@ -321,6 +373,6 @@ internal sealed class PeripheralPresenter
     internal void Clear()
     {
         if(root!=null) Object.Destroy(root.gameObject);
-        root=null; markers.Clear(); tray.Clear(); overflow.Clear(); demo.Clear(); previewing=false; firstRealMarker=false;
+        root=null; traySummary=null; summaryBacking=null; summaryCount=-1; summaryMeasuredUnit=-1; markers.Clear(); tray.Clear(); overflow.Clear(); demo.Clear(); previewing=false; firstRealMarker=false;
     }
 }

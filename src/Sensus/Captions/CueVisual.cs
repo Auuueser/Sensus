@@ -8,6 +8,8 @@ internal static class CueVisual
 {
     internal static SoundFamily Family(Cue cue) => CreatureSoundCatalog.Basis(cue) switch
     {
+        Cue.GunSafetyOn or Cue.GunSafetyOff or Cue.GunSafetyBlocked or Cue.OtherItemPickup or Cue.OtherItemStow or Cue.OtherItemEquip or Cue.LockMount or Cue.MusicStop or Cue.ItemHandling or Cue.ItemStow => SoundFamily.Mechanical,
+        Cue.ToolWindup => SoundFamily.Movement,
         Cue.CounterBell or Cue.CounterShutter or Cue.AccessHatch or Cue.WarehouseDoor => SoundFamily.Mechanical,
         Cue.CounterGrab or Cue.CounterAttack => SoundFamily.Impact,
         Cue.CounterWarning or Cue.CounterAmbience => SoundFamily.Ground,

@@ -8,13 +8,13 @@ internal static class CompanyAudio
     {
         bool counter=AudioRegistry.Owner(source) is DepositItemsDesk;
         bool hatch=false,warehouse=false;
-        if(CompanySoundRules.DoorClip(clip.name))
+        if(CompanySoundRules.DoorClip(ClipNames.Get(clip)))
             for(var t=source.transform;t!=null;t=t.parent)
             {
                 hatch |= t.name is "TrapDoor" or "TrapDoor(Clone)";
                 warehouse |= t.name is "GarageDoorsContainer" or "GarageDoorsContainer(Clone)";
             }
-        cue=CompanySoundRules.Resolve(clip.name,counter,hatch,warehouse);
+        cue=CompanySoundRules.Resolve(ClipNames.Get(clip),counter,hatch,warehouse);
         return cue!=Cue.Creature;
     }
     internal static int Group(AudioSource source,Cue cue)

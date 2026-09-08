@@ -61,7 +61,7 @@ internal static class LethalConfigIntegration
                 "Close the menu in a round to see a labelled native-style example. Turn off after testing.", "进入游戏回合并关闭菜单后显示原生样式演示字幕。它不代表真实怪物；测试后请关闭。")));
         LethalConfigManager.AddConfigItem(new BoolCheckBoxConfigItem(settings.UnlocatedIndicators,
             Describe(new BoolCheckBoxOptions(), "Peripheral", "周边声音", "Unlocated indicators", "显示无方向提示",
-                "Optional fixed tray for sounds without a reliable bearing. Off by default.", "为无法可靠定位的声音显示固定提示栏，默认关闭，不影响字幕。")));
+                "Fixed tray for sounds without a reliable bearing. On by default.", "为无法可靠定位的声音显示固定提示栏，默认开启，不影响字幕。")));
         LethalConfigManager.AddConfigItem(new IntInputFieldConfigItem(settings.UnlocatedCount,
             Describe(new IntInputFieldOptions { Min=0, Max=int.MaxValue }, "Peripheral", "周边声音", "Maximum unlocated", "无方向提示上限",
                 SensusSettings.CountHelpEn, SensusSettings.CountHelpZh)));
@@ -69,8 +69,8 @@ internal static class LethalConfigIntegration
             Describe(new BoolCheckBoxOptions(), "Peripheral", "周边声音", "Show Unlocated text", "显示“无方向”文字",
                 "Append Unlocated to fixed-tray labels. Off by default; does not toggle indicators.", "在右下角提示名称后显示“无方向”文字，默认关闭；不影响无方向提示本身，即时生效。")));
         LethalConfigManager.AddConfigItem(new FloatSliderConfigItem(settings.Scale,
-            Describe(new FloatSliderOptions(), "Layout", "布局", "Caption scale", "字幕缩放",
-                "Scale the game's native text style, applied immediately.", "缩放游戏原生文字样式，即时生效。")));
+            Describe(new FloatSliderOptions(), "Layout", "布局", "Caption and unlocated scale", "字幕与无方向提示缩放",
+                "Scale captions and unlocated cards together, applied immediately.", "共同缩放字幕与无方向提示，即时生效。")));
         LethalConfigManager.AddConfigItem(new BoolCheckBoxConfigItem(settings.BottomAligned,
             Describe(new BoolCheckBoxOptions(), "Layout", "布局", "Dock to bottom", "底部等距对齐",
                 "Match bottom and right margins; turn off to use manual vertical position.", "底部与右侧等距；关闭后恢复手动纵向位置，即时生效。")));

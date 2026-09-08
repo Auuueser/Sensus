@@ -17,6 +17,56 @@ internal static class CueResolver
         if(HUDManager.Instance!=null && source==HUDManager.Instance.UIAudio && InteractionAudio.LocalMaskClip(clip))
         { cue=Cue.MaskAttachLocal; return true; }
         var item=source.GetComponentInParent<GrabbableObject>();
+        // These item handling clips contain an audible toy call, not just a grab tap.
+        cue=AcousticDetails.Resolve(ClipNames.Get(clip));
+        if(cue is Cue.ToyTrain or Cue.DuckQuack) return true;
+        if(item!=null && item.itemProperties!=null)
+        {
+            if(PlaybackHooks.HandlingPlayback==1 && clip==item.itemProperties.pocketSFX) { cue=Cue.ItemStow; return true; }
+            if(PlaybackHooks.HandlingPlayback==2 && clip==item.itemProperties.grabSFX) { cue=Cue.ItemEquip; return true; }
+        }
+        // GrabObject plays before held ownership settles, on the player's itemAudio.
+        var actor=source.GetComponentInParent<GameNetcodeStuff.PlayerControllerB>();
+        if(actor!=null && StartOfRound.Instance!=null && source==actor.itemAudio &&
+            (Contains(StartOfRound.Instance.playerGrabSFX,clip) ||
+             (actor.currentlyGrabbingObject!=null && clip==actor.currentlyGrabbingObject.itemProperties.grabSFX) ||
+             (actor.currentlyHeldObjectServer!=null && clip==actor.currentlyHeldObjectServer.itemProperties.grabSFX)))
+        { cue=Cue.ItemPickup; return true; }
+        if(item!=null && item.itemProperties!=null)
+        {
+            if(item.isPocketed && clip==item.itemProperties.pocketSFX) { cue=Cue.ItemStow; return true; }
+            if(clip==item.itemProperties.grabSFX) { cue=Cue.ItemPickup; return true; }
+            if(clip==item.itemProperties.pocketSFX) { cue=Cue.ItemStow; return true; }
+        }
+        // Match the actual recording before a shared source's default category.
+        if(item is ShotgunItem shotgun && source==shotgun.gunAudio)
+        {
+            if(clip==shotgun.switchSafetyOnSFX) { cue=Cue.GunSafetyOn; return true; }
+            if(clip==shotgun.switchSafetyOffSFX) { cue=Cue.GunSafetyOff; return true; }
+            if(clip==shotgun.gunSafetySFX) { cue=Cue.GunSafetyBlocked; return true; }
+        }
+        if(item is Shovel shovel && source==shovel.shovelAudio)
+        {
+            if(clip==shovel.reelUp) { cue=Cue.ToolWindup; return true; }
+            if(clip==shovel.swing) { cue=Cue.ToolSwing; return true; }
+            if(Contains(shovel.hitSFX,clip)) { cue=Cue.Impact; return true; }
+        }
+        if(item is KnifeItem knife && source==knife.knifeAudio)
+        {
+            if(Contains(knife.swingSFX,clip)) { cue=Cue.KnifeAttack; return true; }
+            if(Contains(knife.hitSFX,clip)) { cue=Cue.Impact; return true; }
+        }
+        if(item is LockPicker picker)
+        {
+            if(Contains(picker.placeLockPickerClips,clip)) { cue=Cue.LockMount; return true; }
+            if(Contains(picker.finishPickingLockClips,clip)) { cue=Cue.Unlock; return true; }
+        }
+        if(item is BoomboxItem box && source==box.boomboxAudio && Contains(box.stopAudios,clip))
+        { cue=Cue.MusicStop; return true; }
+        if(item!=null && item.itemProperties!=null && item is not HauntedMaskItem &&
+            Contains(item.itemProperties.clinkAudios,clip) &&
+            AcousticDetails.Resolve(ClipNames.Get(clip))==Cue.Creature)
+        { cue=Cue.ItemHandling; return true; }
         if(CompanyAudio.Resolve(source,clip,out cue)) return true;
         if(FeedbackFifth.Resolve(source,clip,out cue)) return true;
         if(FeedbackFourth.Resolve(source,clip,out cue)) return true;
@@ -25,18 +75,6 @@ internal static class CueResolver
         if(movingMask!=null && source==movingMask.movementAudio && AudioRegistry.IsSurfaceStep(clip))
         { cue=Cue.Footsteps; return true; }
         if(FeedbackAudioBindings.Resolve(source,clip,out cue)) return true;
-        // These item handling clips contain an audible toy call, not just a grab tap.
-        cue=AcousticDetails.Resolve(clip.name);
-        if(cue is Cue.ToyTrain or Cue.DuckQuack) return true;
-        // GrabObject plays before held ownership settles, on the player's itemAudio.
-        var actor=source.GetComponentInParent<GameNetcodeStuff.PlayerControllerB>();
-        if(actor!=null && StartOfRound.Instance!=null && source==actor.itemAudio &&
-            (Contains(StartOfRound.Instance.playerGrabSFX,clip) ||
-             (actor.currentlyGrabbingObject!=null && clip==actor.currentlyGrabbingObject.itemProperties.grabSFX) ||
-             (actor.currentlyHeldObjectServer!=null && clip==actor.currentlyHeldObjectServer.itemProperties.grabSFX)))
-        { cue=Cue.ItemPickup; return true; }
-        if(item!=null && item.itemProperties!=null && clip==item.itemProperties.grabSFX)
-        { cue=Cue.ItemPickup; return true; }
         var hurtEnemy=source.GetComponentInParent<EnemyAI>();
         if(hurtEnemy!=null && hurtEnemy.enemyType!=null &&
             (clip==hurtEnemy.enemyType.hitBodySFX || clip==hurtEnemy.enemyType.hitEnemyVoiceSFX))
@@ -52,7 +90,7 @@ internal static class CueResolver
             if(clip==egg.breakEggSFX) { cue=Cue.EggBreak; return true; }
         }
         if(AuditAudioBindings.Resolve(source,clip,out cue)) return true;
-        cue=AcousticDetails.Resolve(clip.name);
+        cue=AcousticDetails.Resolve(ClipNames.Get(clip));
         if(cue!=Cue.Creature) return true;
         if(AudioRegistry.ContextCue(source,clip,out cue)) return true;
         if(AuditAudioBindings.NativeClip(clip,out cue) || SupplementalAudio.Clip(clip,out cue)) return true;

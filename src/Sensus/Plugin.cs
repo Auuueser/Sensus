@@ -16,7 +16,7 @@ namespace Sensus;
 public sealed class Plugin : BaseUnityPlugin
 {
     public const string Guid = "Auuueser.Sensus";
-    public const string PluginVersion = "1.0.0";
+    public const string PluginVersion = "1.0.1";
     private SensusSettings settings = null!;
     private NativeCaptionPresenter presenter = null!;
     private Action<bool>? updateConfigLanguage;
@@ -39,8 +39,12 @@ public sealed class Plugin : BaseUnityPlugin
         capture = new AudioCapture(settings, Logger);
         try
         {
-            if (!RuntimeBaseline.Matches()) Logger.LogWarning("Game assembly differs from the audited V81 baseline; sound capture stays disabled. Update the audit before enabling new game versions.");
-            else { PlaybackHooks.Install(harmony, Logger); capture.Ready = true; }
+            if (!RuntimeBaseline.Matches(Paths.ManagedPath)) Logger.LogWarning("Original game assembly is missing or differs from the audited V81 baseline; sound capture stays disabled. Update the audit before enabling new game versions.");
+            else
+            {
+                Logger.LogInfo("Original V81 assembly verified; installing playback observers against the loaded game assembly.");
+                PlaybackHooks.Install(harmony, Logger); capture.Ready = true;
+            }
         }
         catch (Exception e)
         {

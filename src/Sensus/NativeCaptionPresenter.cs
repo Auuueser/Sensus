@@ -21,6 +21,10 @@ internal sealed class NativeCaptionPresenter
     private string measuredText = "", measuredTitle = "";
     private float measuredWidth, measuredUnit, measuredBodyHeight, measuredTitleHeight, measuredContentWidth;
     private TMP_FontAsset? measuredFont;
+    private string lastEvents="",lastSpoken="",combinedText="";
+    private bool lastChinese;
+    private int lastOmitted=-1;
+    private readonly System.Text.StringBuilder combinedBuilder=new();
     private readonly PeripheralPresenter peripheral;
     internal string Status { get; private set; } = "waiting-for-hud";
     private readonly Vector3[] slotCorners = new Vector3[4];
@@ -51,7 +55,10 @@ internal sealed class NativeCaptionPresenter
             peripheral.Hide();
             if (panel != null) panel.gameObject.SetActive(false);
             if (mode == CaptionDisplayMode.Disabled) startupRemaining = 4;
-            SetState(mode.ToString(), settings);
+            SetState(mode switch {
+                CaptionDisplayMode.Disabled=>"Disabled", CaptionDisplayMode.WaitingForPlayer=>"WaitingForPlayer",
+                CaptionDisplayMode.Dead=>"Dead", CaptionDisplayMode.Menu=>"Menu",
+                CaptionDisplayMode.HiddenHud=>"HiddenHud", _=>"Idle" }, settings);
             return;
         }
         if (panel == null && !CreatePanel(hud)) { SetState("waiting-for-native-templates", settings); return; }
@@ -69,23 +76,21 @@ internal sealed class NativeCaptionPresenter
         fullSafe.yMax=Mathf.Min(fullSafe.yMax,fullSafe.yMin+canvasRect.rect.height*0.48f);
         if (hybrid && !startup) peripheral.Tick(canvas, hud.tipsPanelBody, field, settings, chinese, preview, fullSafe);
         else peripheral.Hide();
-        peripheral.MeasureUnlocated(fullSafe,Mathf.Max(14,hud.tipsPanelBody.fontSize)*settings.MarkerScale.Value*0.85f);
+        peripheral.MeasureUnlocated(fullSafe,Mathf.Max(14,hud.tipsPanelBody.fontSize)*settings.Scale.Value*0.85f);
         float stackGap=unit*0.5f;
         float emptyBaseline=Mathf.Clamp(settings.BottomAligned.Value ? fullSafe.yMin : canvasRect.rect.yMin+canvasRect.rect.height*settings.VerticalPosition.Value,fullSafe.yMin,fullSafe.yMax-peripheral.UnlocatedHeight);
-        peripheral.ArrangeUnlocated(fullSafe,emptyBaseline,canvasRect.rect.center);
         if(settings.DisplayMode.Value == "Peripheral" && spoken.Length==0)
         {
+            peripheral.ArrangeUnlocated(fullSafe,emptyBaseline,canvasRect.rect.center);
             panel!.gameObject.SetActive(false);
             SetState("indicators-only",settings);
             return;
         }
         string text = preview ? (chinese ? ChinesePreview : EnglishPreview) : startup
             ? (captureReady ? (chinese ? "声音字幕已启用" : "Sound captions enabled") : (chinese ? "声音采集未就绪，请查看日志" : "Sound capture unavailable; check the log"))
-            : spoken.Length==0 ? liveCaptions : spoken+(liveCaptions.Length==0 ? "" : "\n"+liveCaptions);
+            : ComposeText(liveCaptions,spoken,chinese);
         if (preview && hybrid) text = chinese ? "转头查看方向 · 后方低吼每隔数秒消退" : "Turn to see directions · rear growl fades periodically";
-        if(!preview && liveCaptions.Length>0 && Sensus.Audio.AudioCapture.Current is { OmittedCaptions: > 0 } overflowCapture)
-            text += chinese ? $"\n另有 {overflowCapture.OmittedCaptions} 项 · 轮换显示" : $"\n{overflowCapture.OmittedCaptions} more · rotating";
-        if(string.IsNullOrEmpty(text)) { panel!.gameObject.SetActive(false); return; }
+        if(string.IsNullOrEmpty(text)) { peripheral.ArrangeUnlocated(fullSafe,emptyBaseline,canvasRect.rect.center); panel!.gameObject.SetActive(false); return; }
         string title = preview ? (chinese ? "SENSUS / 界面演示 · 非真实事件" : "SENSUS / UI PREVIEW · NOT LIVE")
             : (chinese ? "SENSUS / 声音线索" : "SENSUS / SOUND CUES");
         if (preview && !captureReady) title += chinese ? " · 采集未就绪" : " · CAPTURE UNAVAILABLE";
@@ -99,7 +104,6 @@ internal sealed class NativeCaptionPresenter
         // Use the native Canvas coordinate system and native font size. A fixed
         // pixel font size would be tiny or huge on different Canvas scalers.
         header.fontSize = unit * 0.65f;
-        caption.fontSize = unit;
         // Native tip colors animate to black while the original tip is hidden.
         // Retain its font and geometry, but own our readable display colors.
         header.color = new Color(1f, 0.62f, 0.22f, 1);
@@ -113,18 +117,19 @@ internal sealed class NativeCaptionPresenter
         if(Sensus.Audio.AudioCapture.Current is { } capture)
             capture.CaptionScreenBudget=Mathf.Max(1,DisplayCapacity.Rows(safe.height-unit*3-(spoken.Length>0 ? unit*4 : 0),unit*3));
         float width = Mathf.Min(unit * (showHeading ? 18 : 14), safe.width);
-        if (width <= unit * 3) { panel.gameObject.SetActive(false); SetState("native-canvas-layout-pending", settings); return; }
+        if (width <= unit * 3) { peripheral.ArrangeUnlocated(fullSafe,emptyBaseline,canvasRect.rect.center); panel.gameObject.SetActive(false); SetState("native-canvas-layout-pending", settings); return; }
         float padding = unit * (hybrid ? 0.4f : 0.7f);
         string layoutTitle = showHeading ? title : "";
         if(measuredText != text || measuredTitle != layoutTitle || measuredWidth != width-padding*2 || measuredUnit != unit || measuredFont != caption.font)
         {
+            caption.enableAutoSizing=false; caption.fontSize=unit;
             measuredText=text; measuredTitle=layoutTitle; measuredWidth=width-padding*2; measuredUnit=unit; measuredFont=caption.font;
             var titleSize=showHeading ? header.GetPreferredValues(title,measuredWidth,Mathf.Infinity) : Vector2.zero;
             var bodySize=caption.GetPreferredValues(text,measuredWidth,Mathf.Infinity);
             measuredTitleHeight=titleSize.y; measuredBodyHeight=bodySize.y;
             measuredContentWidth=Mathf.Max(titleSize.x,bodySize.x);
         }
-        if(safe.height < padding*2+unit*2) { panel.gameObject.SetActive(false); SetState("native-canvas-layout-pending",settings); return; }
+        if(safe.height < padding*2+unit*2) { peripheral.ArrangeUnlocated(fullSafe,emptyBaseline,canvasRect.rect.center); panel.gameObject.SetActive(false); SetState("native-canvas-layout-pending",settings); return; }
         float titleHeight=Mathf.Min(measuredTitleHeight,safe.height*0.3f);
         float headingGap=showHeading ? unit*0.3f : 0;
         // Keep width stable, but fit height to the actual wrapped text. MaxCaptions
@@ -149,7 +154,7 @@ internal sealed class NativeCaptionPresenter
             if (!caption.font.HasCharacters(ChinesePreview + title, out uint[] _, true, true))
                 log.LogWarning("Sensus native font is missing Chinese glyphs; check LC Chinese Project font support or select English.");
         }
-        SetState($"visible-{mode}", settings);
+        SetState(preview ? "visible-Preview" : startup ? "visible-Startup" : "visible-Live", settings);
         if (startup) startupRemaining = Mathf.Max(0, startupRemaining - Time.unscaledDeltaTime);
         if (mode == CaptionDisplayMode.Live && !firstLiveReported)
         {
@@ -161,6 +166,18 @@ internal sealed class NativeCaptionPresenter
             nextDiagnostic = Time.unscaledTime + 10;
             log.LogInfo($"UI: state={Status}, active={panel.gameObject.activeInHierarchy}, canvas={canvas.isActiveAndEnabled}, alpha={caption.canvasRenderer.GetInheritedAlpha():F2}, glyphs={caption.textInfo.characterCount}, size={width:F0}x{height:F0}.");
         }
+    }
+
+    private string ComposeText(string events,string spoken,bool chinese)
+    {
+        int omitted=events.Length>0 ? Sensus.Audio.AudioCapture.Current?.OmittedCaptions ?? 0 : 0;
+        if(events==lastEvents && spoken==lastSpoken && chinese==lastChinese && omitted==lastOmitted) return combinedText;
+        lastEvents=events; lastSpoken=spoken; lastChinese=chinese; lastOmitted=omitted;
+        combinedBuilder.Clear().Append(spoken);
+        if(events.Length>0) { if(spoken.Length>0) combinedBuilder.Append('\n'); combinedBuilder.Append(events); }
+        if(omitted>0)
+        { combinedBuilder.Append(chinese ? "\n另有 " : "\n").Append(omitted).Append(chinese ? " 项 · 轮换显示" : " more · rotating"); }
+        return combinedText=StableText.Reuse(combinedBuilder,combinedText);
     }
 
     private bool CreatePanel(HUDManager hud)

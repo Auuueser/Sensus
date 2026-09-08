@@ -11,6 +11,7 @@ internal static class NativeAudioDiscovery
     private static readonly List<GameObject> roots=new();
     private static readonly List<AudioSource> sources=new();
     private static readonly HashSet<AudioSource> pointSources=new();
+    private static readonly List<(AudioClip Clip,Vector3 Position)> pointRequests=new(64);
     private static bool attached;
     internal static void Refresh()
     {
@@ -28,6 +29,7 @@ internal static class NativeAudioDiscovery
     internal static void Tick()
     {
         if(!attached) { attached=true; SceneManager.sceneLoaded+=Loaded; Refresh(); }
+        FlushPoints();
         for(int i=0;i<128 && pending.Count>0;i++)
         {
             var node=pending.Dequeue(); if(node==null) continue;
@@ -48,18 +50,30 @@ internal static class NativeAudioDiscovery
     }
     internal static void RequestPoint(AudioClip clip,Vector3 position)
     {
-        if(clip==null) return;
+        if(clip==null || !AudioCapture.AcceptingEvents || pointRequests.Count>=64) return;
+        pointRequests.Add((clip,position));
+    }
+    internal static void CancelPointRequests() => pointRequests.Clear();
+    private static void FlushPoints()
+    {
+        if(pointRequests.Count==0) return;
         try
         {
             pointSources.RemoveWhere(s=>s==null);
-            // Rare managed PlayClipAtPoint call only: its helper returns no source.
-            // Read back the actual playing helper, never synthesize an audible event.
-            foreach(var source in Object.FindObjectsOfType<AudioSource>())
-                if(source.name=="One shot audio" && source.clip==clip && source.isPlaying && (source.transform.position-position).sqrMagnitude<0.0001f && pointSources.Add(source))
-                    AudioCapture.RecordPlay(source);
+            // Native PlayClipAtPoint has no returned handle. Coalesce all requests
+            // into one unsorted, demand-only lookup on the next capture tick.
+            foreach(var source in Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None))
+            {
+                var clip=source.clip;
+                if(clip==null || pointSources.Contains(source)) continue;
+                foreach(var request in pointRequests)
+                    if(clip==request.Clip && source.isPlaying && (source.transform.position-request.Position).sqrMagnitude<0.0001f && source.name=="One shot audio")
+                    { pointSources.Add(source); AudioCapture.RecordPlay(source); break; }
+            }
         }
         catch(System.Exception e) { Debug.LogWarning("Sensus point sound observation: "+e.Message); }
+        finally { pointRequests.Clear(); }
     }
     internal static void Clear()
-    { if(attached) SceneManager.sceneLoaded-=Loaded; attached=false; pending.Clear(); roots.Clear(); sources.Clear(); pointSources.Clear(); }
+    { if(attached) SceneManager.sceneLoaded-=Loaded; attached=false; pending.Clear(); roots.Clear(); sources.Clear(); pointSources.Clear(); pointRequests.Clear(); }
 }

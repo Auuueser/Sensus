@@ -20,10 +20,18 @@ internal sealed class SoundField
         internal float AdmittedAt, LastShown = -1000;
     }
     private readonly List<Signal> signals = new();
+    private readonly Stack<Signal> pool=new(64);
+    private void Retire(Signal signal)
+    {
+        signals.Remove(signal); selected.Remove(signal); unlocated.Remove(signal);
+        if(pool.Count<64) pool.Push(signal);
+    }
     private readonly List<Signal> selected = new();
     private readonly List<Signal> unlocated = new(3);
     internal IReadOnlyList<Signal> Visible => selected;
     internal IReadOnlyList<Signal> Unlocated => unlocated;
+    private readonly HashSet<Cue> unlocatedKinds=new();
+    internal int OmittedUnlocated { get; private set; }
     internal bool HasSignals => signals.Count > 0;
     internal int OverflowDirections { get; private set; }
     private int sequence;
@@ -41,10 +49,10 @@ internal sealed class SoundField
             foreach(var prior in signals) if(prior.Source==source && prior.Cue==Cue.DragFootsteps && now-prior.LastHeard<0.85f) return;
         if(CreatureSoundCatalog.Basis(cue) is Cue.Footsteps or Cue.Running)
             for(int i=signals.Count-1;i>=0;i--) if(signals[i].Source==source && CreatureSoundCatalog.Basis(signals[i].Cue)!=CreatureSoundCatalog.Basis(cue) && CreatureSoundCatalog.Basis(signals[i].Cue) is Cue.Footsteps or Cue.Running)
-            { selected.Remove(signals[i]); unlocated.Remove(signals[i]); signals.RemoveAt(i); }
+            { Retire(signals[i]); }
         if(cue==Cue.DragFootsteps)
             for(int i=signals.Count-1;i>=0;i--) if(signals[i].Source==source && CreatureSoundCatalog.Basis(signals[i].Cue) is Cue.Footsteps or Cue.Running)
-            { selected.Remove(signals[i]); unlocated.Remove(signals[i]); signals.RemoveAt(i); }
+            { Retire(signals[i]); }
         Signal? signal = null;
         foreach(var existing in signals) if(existing.Source == source && CreatureSoundCatalog.Basis(existing.Cue) == CreatureSoundCatalog.Basis(cue)) { signal=existing; break; }
         if (signal == null)
@@ -56,9 +64,11 @@ internal sealed class SoundField
                     if (CueText.Priority(s.Cue) < CueText.Priority(victim.Cue) ||
                         (CueText.Priority(s.Cue) == CueText.Priority(victim.Cue) && s.LastHeard < victim.LastHeard)) victim = s;
                 if (CueText.Priority(victim.Cue) > CueText.Priority(cue)) return;
-                signals.Remove(victim); selected.Remove(victim);
+                Retire(victim);
             }
-            signal = new Signal { Id = ++sequence, Source = source, Cue = cue, Started = now };
+            signal = pool.Count>0 ? pool.Pop() : new Signal();
+            signal.Id=++sequence; signal.Source=source; signal.Cue=cue; signal.Started=now;
+            signal.LastHeard=float.NegativeInfinity; signal.LastRelative=0; signal.AdmittedAt=0; signal.LastShown=-1000;
             signals.Add(signal);
         }
         signal.Cue=EventIdentity.Display(signal.Cue,cue,now-signal.LastHeard);
@@ -99,7 +109,7 @@ internal sealed class SoundField
     {
         layoutSectors=sectorBudgets;
         TrayCapacity=Math.Max(0,unlocatedBudget);
-        for(int i=signals.Count-1;i>=0;i--) if(Alpha(signals[i],now)<=0) signals.RemoveAt(i);
+        for(int i=signals.Count-1;i>=0;i--) if(Alpha(signals[i],now)<=0) Retire(signals[i]);
         foreach (var s in signals) if (IsLive(s, now)) s.LastRelative = Relative(s.Bearing, yaw);
         for(int i=selected.Count-1;i>=0;i--) if(!signals.Contains(selected[i]) || !selected[i].DirectionKnown) selected.RemoveAt(i);
         budget = Math.Max(0, Math.Min(DisplayCapacity.SignalSafety, budget));
@@ -155,6 +165,10 @@ internal sealed class SoundField
             if(rank>old) { unlocated[victim].LastShown=now; unlocated[victim]=s; s.AdmittedAt=now; s.LastShown=now; unlocatedReplaceAt=now+0.5f; }
         }
         RotatePeer(unlocated, false, now, ref unlocatedReplaceAt);
+        unlocatedKinds.Clear();
+        foreach(var s in signals) if(!s.DirectionKnown && CanUnlocate(s)) unlocatedKinds.Add(s.Cue);
+        foreach(var s in unlocated) unlocatedKinds.Remove(s.Cue);
+        OmittedUnlocated=unlocatedKinds.Count;
     }
     private static bool Room(Signal candidate, List<Signal> slots, Signal? removing, int[]? budgets)
     {
@@ -194,6 +208,6 @@ internal sealed class SoundField
         slots[victim].LastShown=now;
         slots[victim]=next; next.AdmittedAt=now; next.LastShown=now; nextReplacement=now+0.5f;
     }
-    internal void Clear() { signals.Clear(); selected.Clear(); unlocated.Clear(); OverflowDirections = 0; replaceAt = unlocatedReplaceAt = 0; layoutSectors=null; TrayCapacity=3; }
+    internal void Clear() { for(int i=signals.Count-1;i>=0;i--) Retire(signals[i]); selected.Clear(); unlocated.Clear(); OverflowDirections = 0; replaceAt = unlocatedReplaceAt = 0; layoutSectors=null; TrayCapacity=3; OmittedUnlocated=0; unlocatedKinds.Clear(); }
     internal static bool CanUnlocate(Signal s) => s.CarriedItem || CuePresentation.Unlocated(s.Cue);
 }

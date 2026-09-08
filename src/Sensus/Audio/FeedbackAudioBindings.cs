@@ -29,8 +29,8 @@ internal static class FeedbackAudioBindings
             if(clip==vehicle.revEngineStart || clip==vehicle.engineRev) { cue=Cue.CruiserIgnition; return true; }
             if(clip==vehicle.engineStartSuccessful) { cue=Cue.CruiserStarted; return true; }
             if(clip==vehicle.insertKey || clip==vehicle.twistKey || clip==vehicle.removeKey) { cue=Cue.CruiserKey; return true; }
-            if(clip.name is "BackDoorOpen" or "BackDoorClose") { cue=Cue.CruiserRearDoor; return true; }
-            if(clip.name is "DoorOpen" or "DoorClose" or "CabinDoorSlide") { cue=Cue.CruiserDoor; return true; }
+            if(ClipNames.Get(clip) is "BackDoorOpen" or "BackDoorClose") { cue=Cue.CruiserRearDoor; return true; }
+            if(ClipNames.Get(clip) is "DoorOpen" or "DoorClose" or "CabinDoorSlide") { cue=Cue.CruiserDoor; return true; }
             // Both native boost layers describe one jet event, not the engine loop.
             if(clip==vehicle.turboBoostSFX || clip==vehicle.turboBoostSFX2)
             { cue=Cue.VehicleBoost; return true; }
@@ -43,8 +43,8 @@ internal static class FeedbackAudioBindings
         if(owner is AnimatedObjectTrigger trigger)
         {
             // Lock picking shares the door hierarchy but is not a door movement.
-            if(clip.name is "LockpickPlayer" or "LockPickerMount" or "LockPickerFinish" or "DoorUnlock" or "DoorUnlock2" or "MineDoorUnlock") return false;
-            var detail=AcousticDetails.Resolve(clip.name);
+            if(ClipNames.Get(clip) is "LockpickPlayer" or "LockPickerMount" or "LockPickerFinish" or "DoorUnlock" or "DoorUnlock2" or "MineDoorUnlock") return false;
+            var detail=AcousticDetails.Resolve(ClipNames.Get(clip));
             var kind=TriggerCue(trigger);
             if(kind==Cue.Door && detail is Cue.CabinetDoor or Cue.Cabinet or Cue.Door or Cue.DoorOpen or Cue.DoorClose)
             { cue=detail is Cue.CabinetDoor or Cue.Cabinet ? Cue.Door : detail; return true; }
@@ -55,10 +55,10 @@ internal static class FeedbackAudioBindings
         { cue=teleporter.isInverseTeleporter ? Cue.InverseTeleport : Cue.Teleport; return true; }
         var item=source.GetComponentInParent<GrabbableObject>();
         if(item is FlashlightItem && (item.name=="LaserPointer" || item.name=="LaserPointer(Clone)") &&
-            clip.name is "FlashlightClickMini" or "FlashlightClickMini2")
+            ClipNames.Get(clip) is "FlashlightClickMini" or "FlashlightClickMini2")
         { cue=Cue.LaserSwitch; return true; }
         if(owner is DeadBodyInfo body && source==body.playAudioOnDeath)
-        { cue=clip.name=="CrushGore" ? Cue.BodyCrush : Cue.DeathSound; return true; }
+        { cue=ClipNames.Get(clip)=="CrushGore" ? Cue.BodyCrush : Cue.DeathSound; return true; }
         // Only the actual loop is lock picking. Handling uses pickup/drop rules.
         if(item is LockPicker picker && source==picker.lockPickerAudio && clip==source.clip && source.loop)
         { cue=Cue.LockPicking; return true; }

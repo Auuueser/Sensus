@@ -40,6 +40,7 @@ internal sealed class AudioCapture : IDisposable
         internal float RefreshCurveAt;
     }
     internal static AudioCapture? Current { get; private set; }
+    internal static bool AcceptingEvents => Current!=null && Current.Ready && Current.settings.Enabled.Value;
     private readonly List<Playback> playing = new();
     private readonly List<Playback> ambientSources = new();
     private readonly HashSet<AudioSource> trackedSources = new();
@@ -50,7 +51,7 @@ internal sealed class AudioCapture : IDisposable
     private float nextPrune;
     private readonly CaptionBuffer captions = new();
     private readonly VoiceActivity voices = new();
-    private readonly Dictionary<int,Playback> voiceSamples = new();
+    private readonly BoundedCache<int,Playback> voiceSamples = new(128);
     private readonly SensusSettings settings;
     private readonly ManualLogSource log;
     private int playbackCalls, received, unresolved, rejected, observed;
@@ -110,6 +111,7 @@ internal sealed class AudioCapture : IDisposable
     }
     private double tickMilliseconds, peakTickMilliseconds;
     private int timedTicks;
+    private bool suspended;
     private readonly HashSet<AudioSource> explicitPlaying = new();
     internal bool Ready { get; set; }
     internal string Text { get; private set; } = "";
@@ -129,6 +131,7 @@ internal sealed class AudioCapture : IDisposable
     }
     private void SceneUnloaded(Scene scene)
     {
+        ClipNames.Clear(); AudioCurves.Clear();
         recentPlantAudio.Clear(); nextPlantTrace=0;
         plantTraceGrowth=null; plantTraceSprayer=null;
         explicitPlaying.RemoveWhere(s=>s==null || s.gameObject.scene.handle==scene.handle);
@@ -160,7 +163,7 @@ internal sealed class AudioCapture : IDisposable
             }
             // isPlaying is also true during PlayOneShot; it cannot prove the assigned clip is playing.
             if(!explicitPlay && AudioRegistry.IsSurfaceStep(source.clip)) return;
-            if(AudioRegistry.Owner(source) is MicrowaveItem || source.clip.name=="MicrowaveWhir" || FeedbackFifth.RequiresExplicitPlay(source))
+            if(AudioRegistry.Owner(source) is MicrowaveItem || ClipNames.Get(source.clip)=="MicrowaveWhir" || FeedbackFifth.RequiresExplicitPlay(source))
             {
                 if(explicitPlay && current.explicitPlaying.Count<128) current.explicitPlaying.Add(source);
                 if(!current.explicitPlaying.Contains(source)) return;
@@ -177,10 +180,11 @@ internal sealed class AudioCapture : IDisposable
     }
     private void Add(AudioSource source, AudioClip clip, float scale, bool oneShot, bool humanFootstep=false)
     {
+        if(!settings.Enabled.Value) return;
         if(settings.Diagnostics.Value && source!=null && clip!=null)
         {
             if(plantTraceGrowth!=null && Time.unscaledTime-plantTraceStarted<=2f && plantTraceEvents++<32)
-                log.LogInfo($"Cadaver post-clear playback: dt={Time.unscaledTime-plantTraceStarted:F3}, clip={clip.name}, source={source.name}, parent={source.transform.parent?.name}, oneShot={oneShot}, volume={source.volume:F3}");
+                log.LogInfo($"Cadaver post-clear playback: dt={Time.unscaledTime-plantTraceStarted:F3}, clip={ClipNames.Get(clip)}, source={source.name}, parent={source.transform.parent?.name}, oneShot={oneShot}, volume={source.volume:F3}");
             if(recentPlantAudio.Count>=32) recentPlantAudio.Dequeue();
             recentPlantAudio.Enqueue((Time.unscaledTime,source,clip));
         }
@@ -199,7 +203,7 @@ internal sealed class AudioCapture : IDisposable
         if(receivingRadio!=null && cue!=Cue.RadioSignal &&
             (source==receivingRadio.target || receivingRadio.audioSourcesReceiving.ContainsValue(source))) cue=Cue.RadioRelay;
         if(cue==Cue.ItemDrop && !InteractionAudio.RecentDrop(source.GetComponentInParent<GrabbableObject>())) return;
-        cue=CreatureSoundCatalog.Refine(clip.name,cue);
+        cue=CreatureSoundCatalog.Refine(ClipNames.Get(clip),cue);
         bool ambient=cue==Cue.Flies;
         if(ambient)
         {
@@ -218,7 +222,7 @@ internal sealed class AudioCapture : IDisposable
         if(spokenRank>0)
             for(int i=playing.Count-1;i>=0;i--) if(playing[i].Source==source && playing[i].SpokenRank>0) Retire(i);
         var playback = pool.Count>0 ? pool.Pop() : new Playback();
-        playback.SpokenRank=spokenRank;playback.SpokenClip=spokenRank>0 ? clip.name : "";
+        playback.SpokenRank=spokenRank;playback.SpokenClip=spokenRank>0 ? ClipNames.Get(clip) : "";
         playback.Vehicle=AudioRegistry.Owner(source) as VehicleController ?? source.GetComponentInParent<VehicleController>();
         playback.Delivery=AudioRegistry.Owner(source) as ItemDropship;
         playback.Item=source.GetComponentInParent<GrabbableObject>();
@@ -228,12 +232,15 @@ internal sealed class AudioCapture : IDisposable
         playback.PersonalMovement=(actor!=null && actor==GameNetworkManager.Instance?.localPlayerController) || (cue==Cue.WaterSplash && FeedbackFourth.LocalSplash) || (cue==Cue.PlantClear && FeedbackFifth.LocalClearing);
         playback.Personal=playback.Item!=null && playback.Item.playerHeldBy!=null && playback.Item.playerHeldBy==GameNetworkManager.Instance?.localPlayerController;
         if(actor!=null && actor==GameNetworkManager.Instance?.localPlayerController && source==actor.itemAudio && cue is Cue.ToyTrain or Cue.DuckQuack or Cue.ZedDog) playback.Personal=true;
+        var handlingActor=actor ?? playback.Item?.playerHeldBy;
+        if(handlingActor!=null && handlingActor!=GameNetworkManager.Instance?.localPlayerController)
+            cue=cue switch { Cue.ItemPickup=>Cue.OtherItemPickup, Cue.ItemStow=>Cue.OtherItemStow, Cue.ItemEquip=>Cue.OtherItemEquip, _=>cue };
         playback.MaskedStep=maskedStep; playback.CadenceObserved=false;
         playback.Source=source; playback.Clip=clip; playback.Cue=cue; playback.Scale=scale; playback.OneShot=oneShot;
         playback.Loop=!oneShot && source.loop; playback.Paused=false; playback.Explained=false; playback.HadDirection=false;
         playback.Clock.Reset(Time.unscaledTime); playback.Occlusion=source.GetComponent<OccludeAudio>();
         playback.Rolloff=null; playback.RefreshCurveAt=0;
-        playback.SpatialCurve=source.GetCustomCurve(AudioSourceCurveType.SpatialBlend);
+        playback.SpatialCurve=AudioCurves.Get(source,AudioSourceCurveType.SpatialBlend);
         playback.DeviceSpatial=FeedbackFourth.DeviceDirection(cue) && playback.SpatialCurve!=null &&
             playback.SpatialCurve.length>1 && playback.SpatialCurve.Evaluate(1)>0.1f;
         playback.Group=FeedbackFifth.Group(source,cue); playback.Radio=false;
@@ -241,7 +248,7 @@ internal sealed class AudioCapture : IDisposable
         if(ambient) { playback.Group=int.MinValue+1; ambientSources.Add(playback); return; }
         playing.Add(playback);
         if(settings.Diagnostics.Value && resolvedReported.Add(cue))
-            log.LogInfo($"Cue resolved: {cue}, clip={clip.name}, source={source.name}, loop={playback.Loop}, scale={scale:F2}, explicitFootstep={humanFootstep}.");
+            log.LogInfo($"Cue resolved: {cue}, clip={ClipNames.Get(clip)}, source={source.name}, loop={playback.Loop}, scale={scale:F2}, explicitFootstep={humanFootstep}.");
         received++;
         if (received == 1) log.LogInfo("First supported audio playback received by Sensus.");
         // Observe now as well as on ticks, so a short clip is not lost between frames.
@@ -293,6 +300,13 @@ internal sealed class AudioCapture : IDisposable
     {
         float now = Time.unscaledTime;
         if (now < nextTick) return;
+        if(!Ready || !settings.Enabled.Value)
+        {
+            if(!suspended)
+            { captions.Clear(); Field.Clear(); voices.Clear(); voiceSamples.Clear(); spoken.Clear(); NativeAudioDiscovery.CancelPointRequests(); Text=SpokenText=""; suspended=true; }
+            return;
+        }
+        suspended=false;
         long started=settings.Diagnostics.Value ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         nextTick = now + 1f / 30f;
         TickPlantTrace(now);
@@ -330,7 +344,7 @@ internal sealed class AudioCapture : IDisposable
         if (settings.Diagnostics.Value && now >= nextDiagnostic)
         {
             nextDiagnostic = now + 10;
-            log.LogInfo($"Capture: listener={listenerState}, playbackCalls={playbackCalls}, resolved={received}, unresolved={unresolved}, filteredSamples={rejected}, audibleSamples={observed}, active={playing.Count}, flySources={ambientSources.Count}, voiceSources={voiceSamples.Count}, captions={captions.Count}; acoustic calibration remains pending.");
+            log.LogInfo($"Capture: listener={listenerState}, playbackCalls={playbackCalls}, resolved={received}, unresolved={unresolved}, filteredSamples={rejected}, audibleSamples={observed}, active={playing.Count}, flySources={ambientSources.Count}, voiceSources={voiceSamples.Count}, voicePairsLastTick={voices.LastPairsChecked}, voicePcmLastTick={voices.LastPcmSamples}, captions={captions.Count}; acoustic calibration remains pending.");
             log.LogInfo($"Capture tick CPU: meanMs={(timedTicks>0 ? tickMilliseconds/timedTicks : 0):F3}, maxMs={peakTickMilliseconds:F3}, ticks={timedTicks}, flyBudget={ScanBudget.For(ambientSources.Count,16)}, registeredSources={AudioRegistry.SourceCount}; excludes UI and asynchronous audio callbacks.");
             tickMilliseconds=peakTickMilliseconds=0; timedTicks=0;
         }
@@ -341,9 +355,11 @@ internal sealed class AudioCapture : IDisposable
         int key=source.GetInstanceID();
         if(!voiceSamples.TryGetValue(key,out var voiceSample) || voiceSample.Source!=source)
         {
-            if(voiceSamples.Count>=128) voiceSamples.Clear();
-            voiceSample=new Playback { Source=source, SpatialCurve=source.GetCustomCurve(AudioSourceCurveType.SpatialBlend), Occlusion=source.GetComponent<OccludeAudio>() };
-            voiceSamples[key]=voiceSample;
+            if(!voiceSamples.TryTakeOldest(out voiceSample)) voiceSample=new Playback();
+            voiceSample.Source=source; voiceSample.SpatialCurve=AudioCurves.Get(source,AudioSourceCurveType.SpatialBlend);
+            voiceSample.Occlusion=source.GetComponent<OccludeAudio>(); voiceSample.Rolloff=null;
+            voiceSample.RefreshCurveAt=0; voiceSample.HadDirection=false; voiceSample.LastBearing=0;
+            voiceSamples.Set(key,voiceSample);
         }
         voiceSample.Cue=cue; voiceSample.Group=cue==Cue.GroundRadioVoice ? source.GetInstanceID() : speakerId;
         voiceSample.Scale=volume; voiceSample.Loop=true; voiceSample.Radio=radio;
@@ -397,11 +413,7 @@ internal sealed class AudioCapture : IDisposable
         else if (source.rolloffMode == AudioRolloffMode.Logarithmic) attenuation = AudibilityMath.Logarithmic(distance, source.minDistance, source.maxDistance);
         else
         {
-            if (p.Rolloff == null || now >= p.RefreshCurveAt)
-            {
-                p.Rolloff = source.GetCustomCurve(AudioSourceCurveType.CustomRolloff);
-                p.RefreshCurveAt = now + 0.25f;
-            }
+            p.Rolloff = AudioCurves.Get(source,AudioSourceCurveType.CustomRolloff);
             var curve = p.Rolloff;
             if (curve == null || curve.length == 0) { Reject(p,"missing-rolloff"); return 0; }
             attenuation = Mathf.Max(0, curve.Evaluate(Mathf.Clamp01(distance / Mathf.Max(0.01f, source.maxDistance))));
@@ -447,7 +459,7 @@ internal sealed class AudioCapture : IDisposable
         p.Explained=true;
         if(!ownDialogue) captions.Observe(p.Group, p.Cue, now, sector, spatial, p.Loop,localMovement,speaker,
             sector<0 ? (!settings.UnlocatedIndicators.Value || Field.TrayCapacity==0 || (!carried && !CuePresentation.Unlocated(p.Cue))) : !Field.CanDisplaySector(sector));
-        float windingSeconds=p.Cue==Cue.Music && !p.OneShot && p.Clip.name=="JackInTheBoxTheme" &&
+        float windingSeconds=p.Cue==Cue.Music && !p.OneShot && ClipNames.Get(p.Clip)=="JackInTheBoxTheme" &&
             p.Clip.frequency==44100 && p.Clip.samples==1890304 ? p.Source.timeSamples/(float)p.Clip.frequency : -1;
         Field.Observe(p.Group, p.Cue, now,
             bearing, sector >= 0, p.Loop, gain,localMovement,
@@ -472,6 +484,7 @@ internal sealed class AudioCapture : IDisposable
     }
     public void Dispose()
     {
+        ClipNames.Clear(); AudioCurves.Clear();
         recentPlantAudio.Clear(); plantTraceGrowth=null; plantTraceSprayer=null;
         SceneManager.sceneUnloaded -= SceneUnloaded;
         trackedSources.Clear(); maskedCadences.Clear();

@@ -16,7 +16,7 @@ internal static class FeedbackFourth
     }
     internal static bool StartupVehicle(AudioSource source,AudioClip clip)
     {
-        if(clip.name is not ("Cruiser_HeadlightsOn" or "Cruiser_Turbulence")) return false;
+        if(ClipNames.Get(clip) is not ("Cruiser_HeadlightsOn" or "Cruiser_Turbulence")) return false;
         var vehicle=AudioRegistry.Owner(source) as VehicleController ?? source.GetComponentInParent<VehicleController>();
         // Initial serialized turbulence volume decays before the controller stops its loop.
         // This does not suppress collision one-shots on that same source.
@@ -26,8 +26,8 @@ internal static class FeedbackFourth
     {
         cue=Cue.Creature;
         var bloom=AudioRegistry.Owner(source) as CadaverBloomAI;
-        if(bloom!=null && source==bloom.creatureSFX && clip.name=="WalkQuickly") { cue=Cue.Running; return true; }
-        if(clip.name=="Boombox6QuestionMark")
+        if(bloom!=null && source==bloom.creatureSFX && ClipNames.Get(clip)=="WalkQuickly") { cue=Cue.Running; return true; }
+        if(ClipNames.Get(clip)=="Boombox6QuestionMark")
         {
             for(var t=source.transform;t!=null;t=t.parent)
                 if(t.name=="DiscoBallContainer" || t.name=="DiscoBallContainer(Clone)") { cue=Cue.DiscoMusic; return true; }

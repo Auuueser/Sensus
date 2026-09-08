@@ -9,9 +9,9 @@ internal static class SupplementalAudio
     internal static void Clear() => scanned.Clear();
     internal static bool Clip(AudioClip clip,out Cue cue)
     {
-        cue=AcousticDetails.Resolve(clip.name);
+        cue=AcousticDetails.Resolve(ClipNames.Get(clip));
         if(cue!=Cue.Creature) return true;
-        cue=clip.name switch
+        cue=ClipNames.Get(clip) switch
         {
             "CentipedeWalk" => Cue.Crawling,
             "FliesBuzzing" or "FliesBuzzingAndMaggots" => Cue.Flies,

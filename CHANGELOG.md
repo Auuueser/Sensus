@@ -3,6 +3,23 @@
 ## 中文
 
 <details>
+<summary><strong>1.0.1 · 修复</strong></summary>
+
+- 修复预加载模组使用内存加载游戏程序集时，声音采集无法启动的问题。
+- 修复音响关闭后丢下，仍出现音乐方向提示的问题。
+- 兼容多人扩容的语音混音通道，减少重复参数警告，并限制密集对讲机采样开销。
+- 优化方向图标、字幕布局与密集事件缓存，减少重复网格重建和内存分配。
+- 优化音频名称、衰减曲线与临时音源查找；关闭辅助时暂停采集处理。
+- 无方向提示默认开启。
+- 区分拾取、收起与取用声音：本人操作显示字幕，他人操作提供声音提示。
+- 细分工具蓄力、开锁器安装、音响关闭及枪械保险音效，修正小刀刺击的提示与警示颜色。
+- 普通物品碰响仅显示字幕。
+- 优化行数限制；超额事件在顶部显示“另有 N 项”。
+- 字幕与无方向提示共用缩放，默认 0.75。
+
+</details>
+
+<details>
 <summary><strong>1.0.0 · Auditus</strong></summary>
 
 - 提供周边声音方向提示、事件字幕与预设音频对白字幕。
@@ -32,6 +49,23 @@
 </details>
 
 ## English
+
+<details>
+<summary><strong>1.0.1 · Fixes</strong></summary>
+
+- Fixed sound capture failing to start when preloaders load the game assembly into memory.
+- Fixed music indicators reappearing when dropping a boombox after turning it off.
+- Supported shared voice mixer channels in expanded lobbies, reduced repeated parameter warnings, and bounded sampling work for crowded radio scenes.
+- Optimized directional icons, caption layout and dense-event caches to reduce repeated mesh rebuilds and allocations.
+- Optimized audio name and curve lookups, batched temporary-source discovery, and paused capture work while assistance is disabled.
+- Enabled unlocated indicators by default.
+- Distinguished pickup, stowing and equipping sounds: local actions use captions, while other players' actions provide sound indicators.
+- Added distinct tool windup, lock picker mounting, boombox stopping and gun safety cues; corrected knife strike labels and warning colors.
+- Routed ordinary item rattling to captions.
+- Refined row limits and added an overflow notice above the cards.
+- Shared scaling between captions and unlocated indicators, defaulting to 0.75.
+
+</details>
 
 <details>
 <summary><strong>1.0.0 · Auditus</strong></summary>

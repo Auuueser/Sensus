@@ -40,7 +40,7 @@ internal static class InteractionAudio
                 foreach(var clip in item.itemProperties.clinkAudios)
                 {
                     if(clip==null) continue;
-                    var cue=clip.name is "MaskLaugh1" or "MaskLaugh2" or "MaskLaugh3" ? Cue.MaskLaugh : Cue.ItemNoise;
+                    var cue=ClipNames.Get(clip) is "MaskLaugh1" or "MaskLaugh2" or "MaskLaugh3" ? Cue.MaskLaugh : Cue.ItemNoise;
                     AudioRegistry.Clips(clip,cue);
                 }
             }
@@ -54,7 +54,7 @@ internal static class InteractionAudio
             {
                 if(audio.clip==null) continue;
                 Cue cue;
-                switch(audio.clip.name)
+                switch(ClipNames.Get(audio.clip))
                 {
                     case "IcecreamTruckV2": case "IcecreamTruckFar": cue=Cue.SupplyLanding; break;
                     case "IcecreamTruckV2VehicleDeliveryVer": case "IcecreamTruckV2VehicleDeliveryVerFar": cue=Cue.VehicleDelivery; break;

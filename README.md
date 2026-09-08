@@ -3,7 +3,7 @@
 <p align="center"><strong>视听无障碍与环境注意力提升</strong></p>
 
 <p align="center">
-  <img alt="版本 1.0.0" src="https://img.shields.io/badge/版本-1.0.0-E35B18?style=flat-square&amp;labelColor=24282C" height="22">
+  <img alt="版本 1.0.1" src="https://img.shields.io/badge/版本-1.0.1-E35B18?style=flat-square&amp;labelColor=24282C" height="22">
   <a href="https://store.steampowered.com/app/1966720/Lethal_Company/"><img alt="游戏 V81" src="https://img.shields.io/badge/游戏-V81-E35B18?style=flat-square&amp;labelColor=24282C" height="22"></a>
   <a href="https://bepinex.org/"><img alt="运行环境 BepInEx 5" src="https://img.shields.io/badge/运行环境-BepInEx%205-E35B18?style=flat-square&amp;labelColor=24282C" height="22"></a>
   <a href="https://github.com/Auuueser/Sensus/blob/main/LICENSE"><img alt="许可 GPL-3.0" src="https://img.shields.io/badge/许可-GPL--3.0-E35B18?style=flat-square&amp;labelColor=24282C" height="22"></a>

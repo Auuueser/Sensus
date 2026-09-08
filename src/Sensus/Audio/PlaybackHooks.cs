@@ -114,6 +114,14 @@ public static class PlaybackHooks
                     replacement=AccessTools.Method(typeof(PlaybackHooks),nameof(UnderwaterOneShot));
                 if(__originalMethod.DeclaringType==typeof(MaskedPlayerEnemy) && __originalMethod.Name==nameof(MaskedPlayerEnemy.PlayFootstepSound) && replacement.Name==nameof(OneShotScaled))
                     replacement=AccessTools.Method(typeof(PlaybackHooks),nameof(MaskedFootstep));
+                if(replacement.Name==nameof(OneShotScaled))
+                {
+                    if(__originalMethod.DeclaringType==typeof(GrabbableObject) && __originalMethod.Name==nameof(GrabbableObject.PocketItem))
+                        replacement=AccessTools.Method(typeof(PlaybackHooks),nameof(StowOneShot));
+                    else if(__originalMethod.DeclaringType==typeof(GameNetcodeStuff.PlayerControllerB) &&
+                        __originalMethod.Name is "ScrollMouse_performed" or "UseUtilitySlot_performed" or "SwitchToSlotClientRpc" or "SwitchItemSlotsClientRpc")
+                        replacement=AccessTools.Method(typeof(PlaybackHooks),nameof(EquipOneShot));
+                }
                 instruction.opcode = OpCodes.Call;
                 instruction.operand = replacement;
             }
@@ -154,6 +162,16 @@ public static class PlaybackHooks
         bool prior=FeedbackRound3.DrowningPlayback;
         try { FeedbackRound3.DrowningPlayback=true; AudioCapture.Record(source,clip,1f,true); }
         finally { FeedbackRound3.DrowningPlayback=prior; }
+    }
+    [ThreadStatic] internal static int HandlingPlayback;
+    public static void StowOneShot(AudioSource source,AudioClip clip,float scale) => HandlingOneShot(source,clip,scale,1);
+    public static void EquipOneShot(AudioSource source,AudioClip clip,float scale) => HandlingOneShot(source,clip,scale,2);
+    private static void HandlingOneShot(AudioSource source,AudioClip clip,float scale,int kind)
+    {
+        source.PlayOneShot(clip,scale);
+        int prior=HandlingPlayback;
+        try { HandlingPlayback=kind; AudioCapture.Record(source,clip,scale,true); }
+        finally { HandlingPlayback=prior; }
     }
     public static void Stop(AudioSource source) { source.Stop(); AudioCapture.Change(source, 0); }
     public static void Pause(AudioSource source) { source.Pause(); AudioCapture.Change(source, 1); }

@@ -52,12 +52,12 @@ internal sealed class SensusSettings
             new AcceptableValueList<string>("Auto", "English", "Chinese")));
         Preview = config.Bind("Preview", "ShowPreview", false,
             "Show a labelled demonstration after closing menus. This is not a detected monster. / 关闭菜单后显示标注为演示的字幕，不代表检测到怪物；测试完请关闭。");
-        UnlocatedIndicators = config.Bind("Peripheral", "ShowUnlocated", false,
-            "Show a fixed tray for genuinely unlocated sounds. Off by default; captions remain available. / 显示无法定位声音的固定提示栏，默认关闭；字幕仍可用。");
+        UnlocatedIndicators = config.Bind("Peripheral", "ShowUnlocated", true,
+            "Show a fixed tray for genuinely unlocated sounds. On by default; captions remain available. / 显示无法定位声音的固定提示栏，默认开启；字幕仍可用。");
         UnlocatedText = config.Bind("Peripheral", "ShowUnlocatedText", false,
             "Append Unlocated to names in the fixed tray. Does not enable the tray itself. / 在右下角提示名称后显示“无方向”，默认关闭；不影响提示本身的开关。");
-        Scale = config.Bind("Layout", "CaptionScale", 1f, new ConfigDescription(
-            "Scale the native text style. / 原生字幕样式缩放。", new AcceptableValueRange<float>(0.75f, 2f)));
+        Scale = config.Bind("Layout", "CaptionScale", 0.75f, new ConfigDescription(
+            "Shared scale for captions and unlocated cards. / 字幕与无方向提示共用缩放。", new AcceptableValueRange<float>(0.75f, 2f)));
         BottomAligned = config.Bind("Layout", "BottomAligned", true, "Align bottom and right margins; disable to use manual vertical position. / 底部与右侧等距，关闭后使用手动纵向位置。");
         VerticalPosition = config.Bind("Layout", "VerticalPosition", 0.24f, new ConfigDescription(
             "Vertical screen position: 0 bottom, 1 top. / 屏幕纵向位置：0 底部，1 顶部。",

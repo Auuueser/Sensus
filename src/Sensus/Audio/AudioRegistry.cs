@@ -115,8 +115,12 @@ internal static class AudioRegistry
     {
         group=source.GetInstanceID();
         bool bound=sources.TryGetValue(group,out var binding) && binding != null && binding.Source == source && binding.Owner != null;
-        if (clips.TryGetValue(clip.GetInstanceID(),out var match) && match.Clip == clip) cue=match.Ambiguous && bound ? binding!.Default : match.Cue;
-        else if (bound) cue=binding!.Default;
+        // Shared item sources also play handling and mod-added clips. Unknown
+        // recordings must not inherit an asserted swing, switch or working state.
+        Cue fallback=bound && binding!.Owner is Shovel or KnifeItem or FlashlightItem or BoomboxItem or LockPicker
+            ? Cue.ItemNoise : bound ? binding!.Default : Cue.Creature;
+        if (clips.TryGetValue(clip.GetInstanceID(),out var match) && match.Clip == clip) cue=match.Ambiguous && bound ? fallback : match.Cue;
+        else if (bound) cue=fallback;
         else { cue=Cue.Creature; return false; }
         // Non-spatial feedback never combines with an owner's world sounds.
         if (bound && binding!.Merge && source.spatialBlend > 0.1f) group=binding!.Owner!.GetInstanceID();

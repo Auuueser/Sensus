@@ -6,7 +6,7 @@ internal static class SpokenSource
     // A shared or radio-relayed clip is not permission to display remotely sourced dialogue.
     internal static int Rank(AudioSource source,AudioClip clip,bool oneShot)
     {
-        if(!SpokenTracks.MatchesLength(clip.name,clip.length)) return 0;
+        if(!SpokenTracks.MatchesLength(ClipNames.Get(clip),clip.length)) return 0;
         var round=StartOfRound.Instance;
         if(oneShot && round!=null && source==round.speakerAudioSource &&
             (clip==round.shipIntroSpeechSFX || clip==round.zeroDaysLeftAlertSFX || clip==round.firedVoiceSFX)) return 3;
